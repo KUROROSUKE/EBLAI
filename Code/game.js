@@ -52,7 +52,7 @@ async function loadModel() {
             model = await tf.loadLayersModel('indexeddb://my_model'); // IndexedDB からロード
             console.log("ローカルの学習済みモデルをロードしました");
         } else {
-            model = await tf.loadLayersModel('../model_web/model3/model.json'); // 外部モデルをロード
+            model = await tf.loadLayersModel('../model_web/NN226/model.json'); // 外部モデルをロード
             console.log("サーバーからモデルをロードしました");
         }
     } catch (error) {
@@ -130,6 +130,31 @@ async function trainModel() {
     await saveModel();
 }
 
+function CanCreateMaterial(material) {
+    // 必要な元素リスト
+    const requiredElements = material.d;
+
+    // 使用可能な元素のカウント
+    const availableElements = {};
+
+    // 使用可能なカードをすべて統合
+    const allCards = [...deck, ...p1_hand, ...p2_hand];
+
+    // 各カードの元素をカウント
+    allCards.forEach(card => {
+        availableElements[card] = (availableElements[card] || 0) + 1;
+    });
+
+    // 必要な元素が揃っているか確認
+    for (const element in requiredElements) {
+        if (!availableElements[element] || availableElements[element] < requiredElements[element]) {
+            return true; // 必要な元素が不足している 「不足していなかったら」なのでここで反転させておく
+        }
+    }
+
+    return false; // 全ての必要な元素が揃っている
+}
+
 //推論
 async function runModel() {
     if (!model) {
@@ -145,13 +170,28 @@ async function runModel() {
 
     // 推論実行
     const output = model.predict(inputData);
-    const outputData = await output.data();
+    let outputData = await output.data();
 
     // 信頼度 (最大確率)
-    const confidence = Math.max(...outputData).toFixed(4);
+    let confidence = Math.max(...outputData).toFixed(4);
 
     // 最も確率が高いクラス (インデックス)
-    const predictedClass = outputData.indexOf(Math.max(...outputData));
+    let predictedClass = outputData.indexOf(Math.max(...outputData));
+
+    // 作成できない場合までループ
+    while (await CanCreateMaterial(materials[predictedClass])) {
+        outputData = outputData.slice(predictedClass + 1); // 修正：splice → slice
+
+        if (outputData.length === 0) {
+            console.log("作成できる候補がありません");
+            return;
+        }
+
+        // 信頼度 (最大確率)
+        confidence = Math.max(...outputData).toFixed(4);
+        // 最も確率が高いクラス (インデックス)
+        predictedClass = outputData.indexOf(Math.max(...outputData));
+    }
 
     // 結果を表示
     console.log(`推論結果: クラス ${predictedClass}, 信頼度: ${confidence}`);
@@ -159,6 +199,7 @@ async function runModel() {
 
     return { predictedClass, confidence };
 }
+
 
 // 5. 学習済みモデルを IndexedDB に保存
 async function saveModel() {
@@ -181,8 +222,6 @@ function oneHotEncode(index, numClasses) {
     encoded[index] = 1;
     return encoded;
 }
-
-
 
 //　load materials
 async function loadMaterials() {
