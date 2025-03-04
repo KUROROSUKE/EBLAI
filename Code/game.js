@@ -52,7 +52,7 @@ async function loadModel() {
             model = await tf.loadLayersModel('indexeddb://my_model'); // IndexedDB からロード
             console.log("ローカルの学習済みモデルをロードしました");
         } else {
-            model = await tf.loadLayersModel('../model_web/NN226/model.json'); // 外部モデルをロード
+            model = await tf.loadLayersModel('../model_web/model3/model.json'); // 外部モデルをロード
             console.log("サーバーからモデルをロードしました");
         }
     } catch (error) {
