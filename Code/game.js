@@ -138,7 +138,7 @@ function CanCreateMaterial(material) {
     const availableElements = {};
 
     // 使用可能なカードをすべて統合
-    const allCards = [...deck, ...p1_hand, ...p2_hand];
+    const allCards = [...deck, ...p2_hand];
 
     // 各カードの元素をカウント
     allCards.forEach(card => {
