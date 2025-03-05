@@ -52,7 +52,7 @@ async function loadModel() {
             model = await tf.loadLayersModel('indexeddb://my_model'); // IndexedDB からロード
             console.log("ローカルの学習済みモデルをロードしました");
         } else {
-            model = await tf.loadLayersModel('../model_web/model3/model.json'); // 外部モデルをロード
+            model = await tf.loadLayersModel('../model/model.json'); // 外部モデルをロード
             console.log("サーバーからモデルをロードしました");
         }
     } catch (error) {
@@ -61,18 +61,19 @@ async function loadModel() {
 }
 
 // 2. 追加データを学習用に変換
-async function addTrainingData(playerData, generatedMaterialIndex) {
+async function addTrainingData(playerData, generatedMaterialIndex, who) {
     if (!model) {
         console.log("モデルがロードされていません");
         return;
     }
 
     // 入力データを取得
-    const inputData = await convertToCount(playerData);
+    var inputData = await convertToCount(playerData);
+    inputData.push(who)
     console.log("学習用データ:", inputData);
 
     // データをTensorに変換
-    const inputTensor = tf.tensor2d([inputData], [1, 24]);
+    const inputTensor = tf.tensor2d([inputData], [1, 25]);
     const outputTensor = tf.tensor2d([oneHotEncode(generatedMaterialIndex, model.outputShape[1])], [1, model.outputShape[1]]);
 
     // データセットに追加
@@ -102,14 +103,14 @@ async function trainModel() {
 
     // モデルのコンパイル（追加学習用）
     model.compile({
-        optimizer: tf.train.adam(0.001),
+        optimizer: tf.train.adam(0.002),
         loss: 'categoricalCrossentropy',
         metrics: ['accuracy']
     });
 
     // 学習
     await model.fit(xTrain, yTrain, {
-        epochs: 2,
+        epochs: 3,
         batchSize: 4,
         callbacks: {
             onEpochEnd: (epoch, logs) => {
@@ -156,7 +157,7 @@ function CanCreateMaterial(material) {
 }
 
 //推論
-async function runModel() {
+async function runModel(who) {
     if (!model) {
         console.log("モデルがロードされていません");
         return;
@@ -164,9 +165,10 @@ async function runModel() {
 
     // 入力データ
     var inputData = await convertToCount();
+    inputData.push(who);
     console.log("入力データ:", inputData);
 
-    inputData = tf.tensor2d([inputData], [1, 24]);
+    inputData = tf.tensor2d([inputData], [1, 25]);
 
     // 推論実行
     const output = model.predict(inputData);
@@ -178,6 +180,7 @@ async function runModel() {
     // 最も確率が高いクラス (インデックス)
     let predictedClass = outputData.indexOf(Math.max(...outputData));
 
+    confidences = output
     // 作成できない場合までループ
     while (await CanCreateMaterial(materials[predictedClass])) {
         outputData = outputData.slice(predictedClass + 1); // 修正：splice → slice
@@ -196,6 +199,7 @@ async function runModel() {
     // 結果を表示
     console.log(`推論結果: クラス ${predictedClass}, 信頼度: ${confidence}`);
     document.getElementById("predictResult").innerHTML = `予測結果：${materials[predictedClass].a}・信頼度：${confidence}`;
+
 
     return { predictedClass, confidence };
 }
@@ -310,8 +314,7 @@ async function search(components) {
     }) || materials[0];
 }
 
-async function p1_make() {
-    predictedMaterialP2 = await runModel()
+async function p1_make(predictedMaterialP2) {
     const makeable_material = await search_materials(arrayToObj(p1_hand));
 
     // 作れる物質がない場合は "なし" を返す
@@ -356,8 +359,10 @@ async function get_dora() {
 }
 
 async function done(who, isRon = false) {
+
     const p2_make_material = await p2_make();
-    const p1_make_material = await p1_make();
+    predictedMaterialP2 = await runModel(who=="p1" ? 0:1)
+    const p1_make_material = await p1_make(predictedMaterialP2);
 
     dora = await get_dora();
     console.log(`ドラ: ${dora}`);
@@ -403,7 +408,7 @@ async function done(who, isRon = false) {
     //モデルを学習
     let playerData = convertToCount(dropped_cards_p2)
     let generatedMaterialIndex = p2_make_material.f
-    await addTrainingData(playerData, generatedMaterialIndex);
+    await addTrainingData(playerData, generatedMaterialIndex, who=="p1" ? 0:1);
     await trainModel();
 
     // 勝者判定
